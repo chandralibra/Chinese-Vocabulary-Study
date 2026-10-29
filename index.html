@@ -101,6 +101,25 @@
     color: var(--star);
   }
 
+  .rocket { display: inline-block; position: relative; z-index: 50; }
+  .rocket.fly { animation: rocketFly 1.9s cubic-bezier(.5,0,.9,.6) forwards; pointer-events: none; }
+  .rocket.fly::after { content: "🔥"; position: absolute; left: -.38em; bottom: -.5em; font-size: .7em; animation: flame .15s infinite alternate; }
+  .rocket.back { animation: rocketIn .7s ease-out; }
+  @keyframes rocketFly {
+    0%   { transform: translateY(0) rotate(-45deg) scale(1); }
+    12%  { transform: translateY(6px) rotate(-45deg) scale(1.15); }
+    100% { transform: translateY(-120vh) rotate(-45deg) scale(1.6); }
+  }
+  @keyframes rocketIn { 0% { transform: translateY(50px) scale(.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
+  @keyframes flame { from { transform: scale(.8); } to { transform: scale(1.25); } }
+  .finale { display: none; position: fixed; left: 50%; top: 38%; transform: translate(-50%,-50%); z-index: 60;
+    background: rgba(11,15,46,.94); border: 3px solid var(--star); border-radius: 24px; padding: 22px 28px;
+    font-size: 2rem; font-weight: 800; color: var(--star); text-align: center; box-shadow: 0 0 40px rgba(255,209,102,.5); max-width: 86vw; }
+  .finale.show { display: block; animation: rocketIn .5s ease-out; }
+  .finale small { display: block; font-size: 1.1rem; font-weight: 600; color: #fff; margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) { .rocket.fly { animation-duration: .01s; } }
+  .card-stars { margin-top: 6px; font-size: 1.6rem; letter-spacing: 4px; color: var(--star); min-height: 2rem; }
+  .card-stars small { font-size: .95rem; letter-spacing: 0; opacity: .8; margin-left: 8px; }
   .star-icon { font-size: 1.4rem; filter: drop-shadow(0 0 6px rgba(255,209,102,.6)); }
 
   nav.tabs {
@@ -408,9 +427,11 @@
 
 <div class="wrap">
   <header>
-    <h1>🚀 Space Word Explorer</h1>
+    <h1><span class="rocket" id="rocket">🚀</span> Space Word Explorer</h1>
+    <div class="finale" id="finale" onclick="this.classList.remove('show')">🏆 Mission complete!<small>You earned every star. Amazing!</small></div>
     <p>This week's mission words</p>
     <div class="stars-bar"><span class="star-icon">⭐</span><span id="starCount">0</span><span class="star-icon">⭐</span></div>
+    <div class="card-stars" id="cardStars" aria-live="polite"></div>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -578,6 +599,10 @@ const VOCAB = [
 ];
 
 let stars = 0;
+const STAR_KEY = 'swe_stars_v1';
+const TABS = ['word', 'sentence', 'spelling'];
+let earned = {};
+try { earned = JSON.parse(localStorage.getItem(STAR_KEY) || '{}') || {}; } catch (e) { earned = {}; }
 let currentIndex = 0;
 let flipped = false;
 
@@ -585,6 +610,7 @@ function renderAll() {
   renderWord();
   renderSentence();
   setupSpelling();
+  updateStars();
 }
 
 function nextItem() {
@@ -605,10 +631,53 @@ function showView(name) {
   document.getElementById(map[name]).setAttribute('aria-selected', 'true');
 }
 
-function addStar() {
-  stars++;
-  document.getElementById('starCount').textContent = stars;
+/* One star per tab per card (max 3 per card), earned by tapping that tab's audio button.
+   Tapping again on the same tab adds nothing. Progress is saved on this device. */
+function earnStar(tab) {
+  const key = VOCAB[currentIndex].zh;
+  earned[key] = earned[key] || {};
+  if (earned[key][tab]) return;
+  earned[key][tab] = true;
+  try { localStorage.setItem(STAR_KEY, JSON.stringify(earned)); } catch (e) {}
+  updateStars();
   burstConfetti();
+  const done = TABS.every(t => earned[key][t]);
+  if (done) {
+    flyRocket();
+    const all = VOCAB.every(w => earned[w.zh] && TABS.every(t => earned[w.zh][t]));
+    if (all) missionComplete();
+  }
+}
+
+/* Rocket flies off the top of the screen when a card reaches 3 stars, then a new one slides in. */
+function flyRocket() {
+  const r = document.getElementById('rocket');
+  r.classList.remove('back');
+  r.classList.add('fly');
+  setTimeout(() => { burstConfetti(); }, 500);
+  setTimeout(() => {
+    r.classList.remove('fly');
+    r.classList.add('back');
+  }, 2300);
+}
+
+function missionComplete() {
+  setTimeout(() => {
+    document.getElementById('finale').classList.add('show');
+    [0, 400, 800, 1200].forEach(t => setTimeout(burstConfetti, t));
+    setTimeout(() => document.getElementById('finale').classList.remove('show'), 6000);
+  }, 1200);
+}
+
+function updateStars() {
+  let total = 0;
+  VOCAB.forEach(w => { TABS.forEach(t => { if (earned[w.zh] && earned[w.zh][t]) total++; }); });
+  stars = total;
+  document.getElementById('starCount').textContent = total + ' / ' + (VOCAB.length * 3);
+  const mine = earned[VOCAB[currentIndex].zh] || {};
+  const n = TABS.filter(t => mine[t]).length;
+  document.getElementById('cardStars').innerHTML = '⭐'.repeat(n) + '☆'.repeat(3 - n) +
+    (n === 3 ? '<small>Card complete!</small>' : '<small>Tap 🔊 on each tab</small>');
 }
 
 /* ---- Word (flashcard) ---- */
@@ -630,6 +699,7 @@ function flipCard() {
 function speakWord(e) {
   e.stopPropagation();
   speakChinese(VOCAB[currentIndex].zh);
+  earnStar('word');
 }
 
 /* ---- Sentence ---- */
@@ -648,6 +718,7 @@ function renderSentence() {
 function speakSentence(e) {
   e.stopPropagation();
   speakChinese(VOCAB[currentIndex].sentenceZh);
+  earnStar('sentence');
 }
 
 function speakChinese(text) {
@@ -694,6 +765,7 @@ function setupSpelling() {
 function speakSpelling(e) {
   e.stopPropagation();
   speakChinese(VOCAB[currentIndex].zh);
+  earnStar('spelling');
 }
 
 /* ---- Confetti ---- */
