@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Space Word Explorer</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chinese Words">
+<meta name="theme-color" content="#0b0f2e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@500;700;800&family=Noto+Sans+SC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* ===== Design tokens =====
+     Layout concept: a single-screen "mission console" — a star-field backdrop that never scrolls behind
+     the content, with three big tappable "mission" tabs (Word / Sentence / Spelling) that expand into
+     full activities. Deliberately single dark-theme (immersive space cockpit), not adaptive to system light mode. */
+  :root {
+    --bg: #0b0f2e;
+    --bg-deep: #060818;
+    --panel: #161c4a;
+    --panel-2: #1f2660;
+    --star: #ffd166;
+    --rocket: #ff6b9d;
+    --nebula: #8c7bff;
+    --text: #f6f4ff;
+    --text-dim: #b7b2e8;
+    --good: #4ade80;
+    --bad: #ff7a7a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Nunito', system-ui, sans-serif;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  #stars {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--bg-deep);
+  }
+
+  h1, h2, h3, .display {
+    font-family: 'Baloo 2', system-ui, sans-serif;
+  }
+
+  .zh {
+    font-family: 'Noto Sans SC', sans-serif;
+  }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  header h1 {
+    font-size: clamp(1.6rem, 6vw, 2.4rem);
+    margin: 0 0 4px;
+    color: var(--star);
+    text-shadow: 0 0 18px rgba(255, 209, 102, 0.5);
+    text-wrap: balance;
+  }
+
+  header p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .stars-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 1.3rem;
+    color: var(--star);
+  }
+
+  .star-icon { font-size: 1.4rem; filter: drop-shadow(0 0 6px rgba(255,209,102,.6)); }
+
+  nav.tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  nav.tabs button {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: clamp(0.95rem, 3.2vw, 1.15rem);
+    color: var(--text);
+    background: var(--panel);
+    border: 3px solid transparent;
+    border-radius: 18px;
+    padding: 14px 6px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    min-width: 0;
+  }
+
+  nav.tabs button .ico { font-size: 1.8rem; }
+
+  nav.tabs button[aria-selected="true"] {
+    background: var(--panel-2);
+    border-color: var(--nebula);
+    transform: translateY(-2px);
+  }
+
+  nav.tabs button:active { transform: scale(0.96); }
+
+  main {
+    background: var(--panel);
+    border-radius: 24px;
+    padding: 22px 18px 26px;
+    min-height: 380px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---- Word (flashcard) ---- */
+  .card-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .flashcard {
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 4 / 3;
+    perspective: 1400px;
+    cursor: pointer;
+  }
+
+  .flashcard-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform .5s cubic-bezier(.2,.8,.3,1.2);
+    transform-style: preserve-3d;
+  }
+
+  .flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    border-radius: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .face.front {
+    background: linear-gradient(160deg, var(--panel-2), #2a3380);
+    border: 3px solid var(--nebula);
+  }
+
+  .face.front .zh {
+    font-size: clamp(3rem, 14vw, 4.6rem);
+    font-weight: 900;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+
+  .face.back {
+    background: linear-gradient(160deg, #2a1d57, #4a2c78);
+    border: 3px solid var(--rocket);
+    transform: rotateY(180deg);
+  }
+
+  .face.back .pinyin {
+    font-size: clamp(1.6rem, 6vw, 2.2rem);
+    font-weight: 800;
+    color: var(--star);
+  }
+
+  .face.back .english {
+    font-size: clamp(1.1rem, 4.5vw, 1.5rem);
+    font-weight: 700;
+  }
+
+  .hint {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .controls-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button.pill {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #10123a;
+    transition: transform .1s ease, filter .15s ease;
+  }
+
+  button.pill:active { transform: scale(0.95); }
+
+  .pill.sound { background: var(--star); }
+  .pill.nebula { background: var(--nebula); color: #fff; }
+  .pill.pink { background: var(--rocket); color: #fff; }
+  .pill:disabled { opacity: 0.45; cursor: default; }
+
+  .card-nav {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 420px;
+    color: var(--text-dim);
+    font-weight: 800;
+    font-family: 'Baloo 2', sans-serif;
+  }
+
+  /* ---- Sentence ---- */
+  .sentence-card {
+    background: linear-gradient(160deg, var(--panel-2), #2a3380);
+    border: 3px solid var(--nebula);
+    border-radius: 22px;
+    padding: 28px 20px;
+    text-align: center;
+    margin-bottom: 18px;
+  }
+
+  .sentence-card .sentence-zh {
+    font-size: clamp(1.7rem, 7.5vw, 2.4rem);
+    font-weight: 800;
+    line-height: 1.4;
+    text-wrap: balance;
+  }
+
+  .sentence-card .sentence-zh .highlight {
+    color: var(--star);
+    text-shadow: 0 0 12px rgba(255, 209, 102, 0.5);
+  }
+
+  .sentence-card .sentence-pinyin {
+    font-size: clamp(1rem, 4.2vw, 1.3rem);
+    font-weight: 700;
+    color: var(--star);
+    margin-top: 10px;
+  }
+
+  .sentence-card .sentence-english {
+    font-size: clamp(0.95rem, 3.8vw, 1.2rem);
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  /* ---- Quiz / shared prompt ---- */
+  .quiz-prompt {
+    background: linear-gradient(160deg, var(--panel-2), #2a3380);
+    border-radius: 20px;
+    padding: 22px 16px;
+    text-align: center;
+    margin-bottom: 18px;
+  }
+
+  .quiz-prompt .zh {
+    font-size: clamp(2.6rem, 11vw, 3.6rem);
+    font-weight: 900;
+  }
+
+  .quiz-sub {
+    color: var(--text-dim);
+    font-weight: 800;
+    font-size: 1rem;
+    margin-top: 4px;
+  }
+
+  .feedback {
+    text-align: center;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 1.2rem;
+    min-height: 1.6em;
+    margin-top: 14px;
+  }
+
+  .feedback.good { color: var(--good); }
+  .feedback.bad { color: var(--bad); }
+
+  /* ---- Spelling (pinyin tiles) ---- */
+  .spelling-target {
+    min-height: 70px;
+    background: var(--bg-deep);
+    border: 3px dashed var(--nebula);
+    border-radius: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    margin-bottom: 16px;
+  }
+
+  .tile {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: clamp(1.1rem, 5vw, 1.5rem);
+    font-weight: 700;
+    background: var(--panel-2);
+    border: 3px solid var(--rocket);
+    border-radius: 14px;
+    padding: 10px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .tile:active { transform: scale(0.95); }
+
+  .bank {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 18px;
+    min-height: 60px;
+  }
+
+  .translation-hint {
+    text-align: center;
+    color: var(--text-dim);
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-top: 18px;
+    font-weight: 700;
+  }
+
+  canvas#confetti {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  [hidden] { display: none !important; }
+
+  :focus-visible {
+    outline: 3px solid var(--star);
+    outline-offset: 2px;
+  }
+</style>
+</head>
+<body>
+
+
+<div id="stars"></div>
+<canvas id="confetti"></canvas>
+
+<div class="wrap">
+  <header>
+    <h1>🚀 Space Word Explorer</h1>
+    <p>This week's mission words</p>
+    <div class="stars-bar"><span class="star-icon">⭐</span><span id="starCount">0</span><span class="star-icon">⭐</span></div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabWord" aria-selected="true" onclick="showView('word')">
+      <span class="ico">🪐</span>Word
+    </button>
+    <button role="tab" id="tabSentence" aria-selected="false" onclick="showView('sentence')">
+      <span class="ico">☄️</span>Sentence
+    </button>
+    <button role="tab" id="tabSpelling" aria-selected="false" onclick="showView('spelling')">
+      <span class="ico">👾</span>Spelling
+    </button>
+  </nav>
+
+  <main>
+    <!-- WORD -->
+    <section class="view active" id="view-word">
+      <div class="card-stage">
+        <div class="flashcard" id="flashcard" onclick="flipCard()">
+          <div class="flashcard-inner" id="flashcardInner">
+            <div class="face front">
+              <div class="zh" id="fcZh"></div>
+              <div class="hint">👆 Tap the card to flip!</div>
+            </div>
+            <div class="face back">
+              <div class="pinyin" id="fcPinyin"></div>
+              <div class="english" id="fcEnglish"></div>
+            </div>
+          </div>
+        </div>
+        <div class="controls-row">
+          <button class="pill sound" onclick="speakWord(event)">🔊 Say the word</button>
+        </div>
+        <div class="card-nav">
+          <button class="pill nebula" onclick="prevItem()">⬅ Back</button>
+          <span id="wordCounter" style="align-self:center;">1 / 1</span>
+          <button class="pill nebula" onclick="nextItem()">Next ➡</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SENTENCE -->
+    <section class="view" id="view-sentence">
+      <div class="sentence-card">
+        <div class="sentence-zh zh" id="senZh"></div>
+        <div class="sentence-pinyin" id="senPinyin"></div>
+        <div class="sentence-english" id="senEnglish"></div>
+      </div>
+      <div class="controls-row">
+        <button class="pill sound" onclick="speakSentence(event)">🔊 Read the sentence</button>
+      </div>
+      <div class="card-nav" style="max-width:none; margin-top:16px;">
+        <button class="pill nebula" onclick="prevItem()">⬅ Back</button>
+        <span id="sentenceCounter" style="align-self:center;">1 / 1</span>
+        <button class="pill nebula" onclick="nextItem()">Next ➡</button>
+      </div>
+    </section>
+
+    <!-- SPELLING -->
+    <section class="view" id="view-spelling">
+      <div class="quiz-prompt">
+        <div class="zh" id="spellZh"></div>
+        <div class="quiz-sub">The pinyin spelling, syllable by syllable</div>
+      </div>
+      <div class="spelling-target" id="spellTarget"></div>
+      <div class="controls-row">
+        <button class="pill sound" onclick="speakSpelling(event)">🔊 Say it slowly</button>
+      </div>
+      <div class="card-nav" style="max-width:none; margin-top:16px;">
+        <button class="pill nebula" onclick="prevItem()">⬅ Back</button>
+        <span id="spellCounter" style="align-self:center;">1 / 1</span>
+        <button class="pill nebula" onclick="nextItem()">Next ➡</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>Tip: send next week's vocabulary card photo to build a new mission! 🛰️</footer>
+</div>
+
+<script>
+/* ===== Vocabulary data =====
+   Add more entries here when a new weekly card comes in — everything below runs off this array.
+   pinyinSyllables must list each syllable in order for the Spelling game. */
+const VOCAB = [
+  {
+    zh: "形影不离",
+    pinyin: "xíng yǐng bù lí",
+    pinyinSyllables: ["xíng", "yǐng", "bù", "lí"],
+    english: "inseparable (like body and shadow)",
+    sentenceWords: ["形影不离"],
+    sentenceZh: "我们是形影不离的好朋友。",
+    sentencePinyin: "Wǒmen shì xíngyǐngbùlí de hǎo péngyou.",
+    sentenceEnglish: "We are inseparable good friends."
+  },
+  {
+    zh: "虽然……但是……",
+    pinyin: "suīrán…… dànshì……",
+    pinyinSyllables: ["suī", "rán", "dàn", "shì"],
+    english: "although... but... (used together)",
+    sentenceWords: ["虽然", "但是"],
+    sentenceZh: "虽然花猫受伤了，但是它坚持到底，跑到终点。",
+    sentencePinyin: "Suīrán huāmāo shòushāng le, dànshì tā jiānchí dàodǐ, pǎo dào zhōngdiǎn.",
+    sentenceEnglish: "Although the calico cat got hurt, it kept going and ran all the way to the finish line."
+  },
+  {
+    zh: "道歉",
+    pinyin: "dào qiàn",
+    pinyinSyllables: ["dào", "qiàn"],
+    english: "to apologize",
+    sentenceWords: ["道歉"],
+    sentenceZh: "哥哥不小心打破杯子，他红着脸向妈妈道歉。",
+    sentencePinyin: "Gēge bù xiǎoxīn dǎpò bēizi, tā hóngzhe liǎn xiàng māma dàoqiàn.",
+    sentenceEnglish: "Older brother accidentally broke the cup. With a red face, he apologized to Mom."
+  },
+  {
+    zh: "带",
+    pinyin: "dài",
+    pinyinSyllables: ["dài"],
+    english: "to take / to bring along",
+    sentenceWords: ["带"],
+    sentenceZh: "星期日早上，妈妈带我去超级市场买东西。",
+    sentencePinyin: "Xīngqīrì zǎoshang, māma dài wǒ qù chāojí shìchǎng mǎi dōngxi.",
+    sentenceEnglish: "On Sunday morning, Mom took me to the supermarket to buy things."
+  },
+  {
+    zh: "认真",
+    pinyin: "rèn zhēn",
+    pinyinSyllables: ["rèn","zhēn"],
+    english: "serious / conscientious / careful",
+    sentenceWords: ["认真"],
+    sentenceZh: "好学生读书要认真，写字要专心。",
+    sentencePinyin: "Hǎo xuésheng dúshū yào rènzhēn, xiě zì yào zhuānxīn.",
+    sentenceEnglish: "A good student must be serious when reading, and focused when writing."
+  },
+  {
+    zh: "生病",
+    pinyin: "shēng bìng",
+    pinyinSyllables: ["shēng","bìng"],
+    english: "to get sick",
+    sentenceWords: ["生病"],
+    sentenceZh: "妈妈生病了，要去看医生。",
+    sentencePinyin: "Māma shēngbìng le, yào qù kàn yīshēng.",
+    sentenceEnglish: "Mom is sick and needs to see a doctor."
+  },
+  {
+    zh: "住",
+    pinyin: "zhù",
+    pinyinSyllables: ["zhù"],
+    english: "to live (in a place)",
+    sentenceWords: ["住"],
+    sentenceZh: "我住在又大又漂亮的房子里。",
+    sentencePinyin: "Wǒ zhù zài yòu dà yòu piàoliang de fángzi lǐ.",
+    sentenceEnglish: "I live in a house that is big and beautiful."
+  },
+  {
+    zh: "四脚朝天",
+    pinyin: "sì jiǎo cháo tiān",
+    pinyinSyllables: ["sì","jiǎo","cháo","tiān"],
+    english: "flat on one's back with limbs in the air",
+    sentenceWords: ["四脚朝天"],
+    sentenceZh: "哥哥一不小心，跌了个四脚朝天。",
+    sentencePinyin: "Gēge yī bù xiǎoxīn, diē le ge sìjiǎocháotiān.",
+    sentenceEnglish: "Older brother was careless for a moment and fell flat on his back."
+  }
+];
+
+let stars = 0;
+let currentIndex = 0;
+let flipped = false;
+
+function renderAll() {
+  renderWord();
+  renderSentence();
+  setupSpelling();
+}
+
+function nextItem() {
+  currentIndex = (currentIndex + 1) % VOCAB.length;
+  renderAll();
+}
+
+function prevItem() {
+  currentIndex = (currentIndex - 1 + VOCAB.length) % VOCAB.length;
+  renderAll();
+}
+
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', 'false'));
+  const map = { word: 'tabWord', sentence: 'tabSentence', spelling: 'tabSpelling' };
+  document.getElementById(map[name]).setAttribute('aria-selected', 'true');
+}
+
+function addStar() {
+  stars++;
+  document.getElementById('starCount').textContent = stars;
+  burstConfetti();
+}
+
+/* ---- Word (flashcard) ---- */
+function renderWord() {
+  const w = VOCAB[currentIndex];
+  document.getElementById('fcZh').textContent = w.zh;
+  document.getElementById('fcPinyin').textContent = w.pinyin;
+  document.getElementById('fcEnglish').textContent = w.english;
+  document.getElementById('wordCounter').textContent = (currentIndex + 1) + ' / ' + VOCAB.length;
+  flipped = false;
+  document.getElementById('flashcard').classList.remove('flipped');
+}
+
+function flipCard() {
+  flipped = !flipped;
+  document.getElementById('flashcard').classList.toggle('flipped', flipped);
+}
+
+function speakWord(e) {
+  e.stopPropagation();
+  speakChinese(VOCAB[currentIndex].zh);
+}
+
+/* ---- Sentence ---- */
+function renderSentence() {
+  const w = VOCAB[currentIndex];
+  let highlighted = w.sentenceZh;
+  w.sentenceWords.forEach(word => {
+    highlighted = highlighted.split(word).join('<span class="highlight">' + word + '</span>');
+  });
+  document.getElementById('senZh').innerHTML = highlighted;
+  document.getElementById('senPinyin').textContent = w.sentencePinyin;
+  document.getElementById('senEnglish').textContent = w.sentenceEnglish;
+  document.getElementById('sentenceCounter').textContent = (currentIndex + 1) + ' / ' + VOCAB.length;
+}
+
+function speakSentence(e) {
+  e.stopPropagation();
+  speakChinese(VOCAB[currentIndex].sentenceZh);
+}
+
+function speakChinese(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-CN';
+    utter.rate = 0.7;
+    utter.pitch = 1.0;
+    const voices = speechSynthesis.getVoices();
+    const zhVoice = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'));
+    if (zhVoice) utter.voice = zhVoice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+  } catch (err) { /* speech not available, fail quietly */ }
+}
+
+/* ---- Shared helpers ---- */
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ---- Spelling (static pinyin display) ---- */
+function setupSpelling() {
+  const w = VOCAB[currentIndex];
+  document.getElementById('spellZh').textContent = w.zh;
+  document.getElementById('spellCounter').textContent = (currentIndex + 1) + ' / ' + VOCAB.length;
+
+  const target = document.getElementById('spellTarget');
+  target.innerHTML = '';
+  w.pinyinSyllables.forEach(syll => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.textContent = syll;
+    target.appendChild(tile);
+  });
+}
+
+function speakSpelling(e) {
+  e.stopPropagation();
+  speakChinese(VOCAB[currentIndex].zh);
+}
+
+/* ---- Confetti ---- */
+const confettiCanvas = document.getElementById('confetti');
+const ctx = confettiCanvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function burstConfetti() {
+  const colors = ['#ffd166', '#ff6b9d', '#8c7bff', '#4ade80'];
+  for (let i = 0; i < 40; i++) {
+    particles.push({
+      x: confettiCanvas.width / 2,
+      y: confettiCanvas.height / 3,
+      vx: (Math.random() - 0.5) * 10,
+      vy: Math.random() * -8 - 3,
+      size: Math.random() * 6 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 70
+    });
+  }
+  if (!animating) { animating = true; animateConfetti(); }
+}
+
+let animating = false;
+function animateConfetti() {
+  ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.3;
+    p.life--;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+  });
+  particles = particles.filter(p => p.life > 0);
+  if (particles.length > 0) {
+    requestAnimationFrame(animateConfetti);
+  } else {
+    animating = false;
+    ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+  }
+}
+
+/* ---- Starfield background ---- */
+function drawStarfield() {
+  const layer = document.getElementById('stars');
+  let html = '';
+  for (let i = 0; i < 80; i++) {
+    const x = Math.random() * 100;
+    const y = Math.random() * 100;
+    const size = Math.random() * 2 + 1;
+    const delay = Math.random() * 3;
+    html += `<div style="position:absolute;left:${x}%;top:${y}%;width:${size}px;height:${size}px;background:#fff;border-radius:50%;opacity:${Math.random() * 0.6 + 0.3};animation:twinkle 3s ease-in-out ${delay}s infinite;"></div>`;
+  }
+  layer.innerHTML = html;
+}
+
+const styleTag = document.createElement('style');
+styleTag.textContent = '@keyframes twinkle{0%,100%{opacity:.2}50%{opacity:1}}';
+document.head.appendChild(styleTag);
+
+/* ---- Init ---- */
+function init() {
+  renderAll();
+  drawStarfield();
+}
+
+if ('speechSynthesis' in window) {
+  speechSynthesis.onvoiceschanged = () => {};
+}
+
+init();
+</script>
+
+</body>
+</html>
