@@ -418,43 +418,22 @@
     outline-offset: 2px;
   }
 
-  /* ===== One-screen layout: everything fits the phone without scrolling ===== */
-  html, body { height: 100vh; height: 100dvh; }
-  body {
-    display: flex; flex-direction: column;
-    padding-top: max(8px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
-    padding-block: unset;
-    overflow: hidden;
-  }
-  .wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; width: 100%; }
-  header { margin-bottom: 6px; }
-  header h1 { font-size: clamp(1.15rem, 5vw, 1.6rem); margin: 0; }
-  header p { display: none; }
-  .stars-bar { margin-top: 2px; font-size: 1.05rem; gap: 6px; }
-  .star-icon { font-size: 1.05rem; }
-  .card-stars { margin-top: 0; font-size: 1.25rem; min-height: 0; letter-spacing: 3px; }
-  .card-stars small { font-size: .8rem; }
-  nav.tabs { gap: 8px; margin-bottom: 8px; }
-  nav.tabs button { padding: 6px 4px; gap: 0; border-radius: 14px; }
-  nav.tabs button .ico { font-size: 1.3rem; }
-  main { flex: 1; min-height: 0; padding: 12px; display: flex; flex-direction: column; border-radius: 20px; overflow: hidden; }
-  .view.active { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 10px; }
-  .card-stage { flex: 1; min-height: 0; justify-content: space-between; gap: 10px; }
-  .flashcard { width: 100%; max-width: 420px; aspect-ratio: auto; flex: 1; min-height: 0; max-height: 360px; }
-  .controls-row { gap: 10px; }
-  button.pill { padding: 9px 18px; font-size: .95rem; }
-  .sentence-card { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; margin-bottom: 0; padding: 12px 14px; overflow: hidden; font-size: var(--sf, 17px); }
-  .sentence-card .sentence-zh { font-size: 2em; line-height: 1.35; }
-  .sentence-card .sentence-pinyin { font-size: 1.05em; margin-top: 8px; }
-  .sentence-card .sentence-english { font-size: .95em; margin-top: 6px; }
-  .quiz-prompt { padding: 12px; margin-bottom: 0; }
-  .quiz-prompt .zh { font-size: clamp(2rem, 9vw, 3rem); line-height: 1.2; }
-  .quiz-sub { font-size: .85rem; margin-top: 2px; }
-  .spelling-target { flex: 1; min-height: 0; margin-bottom: 0; align-content: center; }
-  .tile { padding: 8px 14px; }
-  .view.active .card-nav { max-width: none; margin-top: 0 !important; }
-  footer { display: none; }
+  /* ===== Slightly smaller middle box so Back/Next stay visible on phones ===== */
+  header { margin-bottom: 14px; }
+  nav.tabs { margin-bottom: 12px; }
+  main { padding: 14px 14px 16px; min-height: 0; }
+  .card-stage { gap: 12px; }
+  .flashcard { aspect-ratio: 16 / 10; max-height: 30vh; max-height: 30dvh; }
+  .face.front .zh { font-size: clamp(2.6rem, 12vw, 4rem); }
+  .sentence-card { padding: 16px 14px; margin-bottom: 12px; }
+  .sentence-card .sentence-zh { font-size: clamp(1.45rem, 6.2vw, 2rem); line-height: 1.35; }
+  .sentence-card .sentence-pinyin { font-size: clamp(.9rem, 3.8vw, 1.1rem); margin-top: 8px; }
+  .sentence-card .sentence-english { font-size: clamp(.85rem, 3.5vw, 1rem); margin-top: 6px; }
+  .quiz-prompt { padding: 14px 12px; margin-bottom: 12px; }
+  .quiz-prompt .zh { font-size: clamp(2.2rem, 10vw, 3.2rem); }
+  .spelling-target { margin-bottom: 12px; }
+  .card-nav { margin-top: 4px; }
+  footer { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -649,7 +628,6 @@ function renderAll() {
   renderSentence();
   setupSpelling();
   updateStars();
-  fitSentence();
 }
 
 function nextItem() {
@@ -668,7 +646,6 @@ function showView(name) {
   document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', 'false'));
   const map = { word: 'tabWord', sentence: 'tabSentence', spelling: 'tabSpelling' };
   document.getElementById(map[name]).setAttribute('aria-selected', 'true');
-  fitSentence();
 }
 
 /* One star per tab per card (max 3 per card), earned by tapping that tab's audio button.
@@ -755,18 +732,6 @@ function renderSentence() {
   document.getElementById('sentenceCounter').textContent = (currentIndex + 1) + ' / ' + VOCAB.length;
 }
 
-function fitSentence() {
-  const card = document.querySelector('.sentence-card');
-  if (!card || card.clientHeight === 0) return;
-  let size = 20;
-  card.style.setProperty('--sf', size + 'px');
-  while (card.scrollHeight > card.clientHeight && size > 9) {
-    size -= 0.5;
-    card.style.setProperty('--sf', size + 'px');
-  }
-}
-window.addEventListener('resize', fitSentence);
-
 function speakSentence(e) {
   e.stopPropagation();
   speakChinese(VOCAB[currentIndex].sentenceZh);
@@ -802,6 +767,7 @@ function shuffle(arr) {
 function setupSpelling() {
   const w = VOCAB[currentIndex];
   document.getElementById('spellZh').textContent = w.zh;
+  document.getElementById('spellZh').style.fontSize = w.zh.length > 5 ? 'clamp(1.6rem, 7vw, 2.2rem)' : '';
   document.getElementById('spellCounter').textContent = (currentIndex + 1) + ' / ' + VOCAB.length;
 
   const target = document.getElementById('spellTarget');
@@ -897,7 +863,6 @@ if ('speechSynthesis' in window) {
 }
 
 init();
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSentence);
 </script>
 
 </body>
